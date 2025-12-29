@@ -1,0 +1,197 @@
+#include "recorder.h"
+
+#include <iostream>
+
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+
+#include <linux/videodev2.h>
+
+int Recorder::requestBuffer() {
+    struct v4l2_requestbuffers request = {};
+
+    request.count = bfrCnt;
+    request.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    request.memory = V4L2_MEMORY_MMAP;
+
+    int res = ioctl(fd, VIDIOC_REQBUFS, &request);
+    if (res == -1) {
+        perror("Buffer request failed");
+        exit(res);
+    }
+    return request.count;
+}
+
+int Recorder::queryBuffer(int ind, unsigned char** buffer) {
+    struct v4l2_buffer buf = {};
+
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_MMAP;
+    buf.index = ind;
+
+    int res = ioctl(fd, VIDIOC_QUERYBUF, &buf);
+    if (res == -1) {
+        perror("Failed to query buffer");
+        exit(res);
+    }
+
+    *buffer = static_cast<unsigned char*>(mmap(
+        NULL,
+        buf.length,
+        PROT_READ | PROT_WRITE,
+        MAP_SHARED,
+        fd,
+        buf.m.offset
+    ));
+
+    return buf.length;
+    
+}
+
+int Recorder::queueBuffer(int ind) {
+    struct v4l2_buffer buf = {};
+
+    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buf.memory = V4L2_MEMORY_MMAP;
+    buf.index = ind;
+
+    int res = ioctl(fd, VIDIOC_QBUF, &buf);
+    if (res == -1) {
+        perror("Failed to query buffer");
+        exit(res);
+    }
+
+    return buf.bytesused;
+    
+}
+
+int Recorder::setFormat() {
+    struct v4l2_format format = {};
+
+    format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    format.fmt.pix.width = width;
+    format.fmt.pix.height = height;
+    format.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+    format.fmt.pix.field = V4L2_FIELD_NONE;
+
+    int res = ioctl(fd, VIDIOC_S_FMT, &format);
+    if (res == -1) {
+        perror("Format failed");
+        exit(res);
+    }
+    return res;
+    
+}
+
+int Recorder::dequeueBuffer() {
+    struct v4l2_buffer buffer = {};
+
+    buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    buffer.memory = V4L2_MEMORY_MMAP;
+    buffer.index = 0;
+    
+    int res = ioctl(fd, VIDIOC_DQBUF, &buffer);
+    if (res == -1) {
+        perror("Format failed");
+        exit(res);
+    }
+    return buffer.index;
+    
+}
+
+int Recorder::startStream() {
+    auto type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    int res = ioctl(fd, VIDIOC_STREAMON, &type);
+    if (res == -1) {
+        perror("VIDIOC_STREAMON");
+    }
+
+    return res >= 0;
+}
+
+int Recorder::stopStream() {
+    auto type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    int res = ioctl(fd, VIDIOC_STREAMOFF, &type);
+    if (res == -1) {
+        perror("VIDIOC_STREAMOFF");
+    }
+
+    return res >= 0;
+}
+
+Recorder::Recorder(const std::string& device, int width, int height)
+    : device(device),
+    height(height),
+    width(width)
+{
+    fd = open(device.data(), O_RDWR);
+
+    if (fd < 0) {
+        perror(device.data());
+        exit(fd);
+    }
+}
+
+Recorder::~Recorder() {
+    for (int i = 0; i < bfrCnt; ++i) {
+        munmap(buffers[i], bufSize);
+    }
+
+    close(fd);
+}
+
+int Recorder::init() {
+    setFormat();
+
+    auto nbufs = requestBuffer();
+    if (nbufs > bfrCnt) {
+        std::cout << "Buffer count too low, set at least: " << nbufs << std::endl;
+        return -1;
+    }
+
+    for (int i = 0; i < bfrCnt; ++i) {
+        bufSize = queryBuffer(i, &buffers[i]);
+        queueBuffer(i);
+    }
+    return 0;
+}
+
+void Recorder::saveToFile(const std::string& filename, int ind) {
+    int file = open(filename.data(), O_RDWR | O_CREAT, 0666);
+    write(file, buffers[ind], bufSize);
+    close(file);
+}
+
+int Recorder::run() {
+
+    if (init() == -1) {
+        return -1;
+    }
+
+    startStream();
+
+    fd_set fds;
+    for (int i = 0; i < 10; ++i) {
+        FD_ZERO(&fds);
+        FD_SET(fd, &fds);
+
+        struct timeval tv = {};
+        tv.tv_usec = 500;
+
+        int r = select(fd + 1, &fds, NULL, NULL, &tv);
+        if (r == -1) {
+            throw std::system_error(errno, std::generic_category(), "Frame wait failed");
+        }
+
+        int ind = dequeueBuffer();
+        saveToFile("captures/out"+std::to_string(i)+".yuv", ind);
+    }
+
+    stopStream();
+    
+    std::cout << "Opened: " << fd << std::endl;
+    
+    return 0;
+}
