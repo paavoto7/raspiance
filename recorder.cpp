@@ -1,3 +1,8 @@
+/*
+Parts of the program are based on Marcus Folkesson's V4L2 tutorial:
+https://www.marcusfolkesson.se/blog/capture-a-picture-with-v4l2/
+*/
+
 #include "recorder.h"
 
 #include <iostream>
@@ -6,6 +11,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <poll.h>
 
 #include <linux/videodev2.h>
 
@@ -24,7 +30,7 @@ int Recorder::requestBuffer() {
     return request.count;
 }
 
-int Recorder::queryBuffer(int ind, unsigned char** buffer) {
+int Recorder::queryBuffer(int ind, Buffer& buffer) {
     struct v4l2_buffer buf = {};
 
     buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -37,8 +43,8 @@ int Recorder::queryBuffer(int ind, unsigned char** buffer) {
         exit(res);
     }
 
-    *buffer = static_cast<unsigned char*>(mmap(
-        NULL,
+    buffer.data = static_cast<unsigned char*>(mmap(
+        nullptr,
         buf.length,
         PROT_READ | PROT_WRITE,
         MAP_SHARED,
@@ -108,6 +114,8 @@ int Recorder::startStream() {
         perror("VIDIOC_STREAMON");
     }
 
+    running = true;
+
     return res >= 0;
 }
 
@@ -117,6 +125,8 @@ int Recorder::stopStream() {
     if (res == -1) {
         perror("VIDIOC_STREAMOFF");
     }
+
+    running = false;
 
     return res >= 0;
 }
@@ -134,12 +144,18 @@ Recorder::Recorder(const std::string& device, int width, int height)
     }
 }
 
-Recorder::~Recorder() {
-    for (int i = 0; i < bfrCnt; ++i) {
-        munmap(buffers[i], bufSize);
+int Recorder::unInit() {
+    for (auto& buf : buffers) {
+        munmap(buf.data, buf.size);
     }
 
     close(fd);
+    return 0;
+}
+
+Recorder::~Recorder() {
+    if (running) stopStream();
+    unInit();
 }
 
 int Recorder::init() {
@@ -151,8 +167,11 @@ int Recorder::init() {
         return -1;
     }
 
+    buffers.resize(bfrCnt);
+
     for (int i = 0; i < bfrCnt; ++i) {
-        bufSize = queryBuffer(i, &buffers[i]);
+        bufSize = queryBuffer(i, buffers[i]);
+        buffers[i].size = bufSize;
         queueBuffer(i);
     }
     return 0;
@@ -160,11 +179,13 @@ int Recorder::init() {
 
 void Recorder::saveToFile(const std::string& filename, int ind) {
     int file = open(filename.data(), O_RDWR | O_CREAT, 0666);
-    write(file, buffers[ind], bufSize);
+    write(file, buffers[ind].data, buffers[ind].size);
     close(file);
 }
 
 int Recorder::run() {
+
+    std::cout << "intitialising" << std::endl;
 
     if (init() == -1) {
         return -1;
@@ -172,26 +193,28 @@ int Recorder::run() {
 
     startStream();
 
-    fd_set fds;
-    for (int i = 0; i < 10; ++i) {
-        FD_ZERO(&fds);
-        FD_SET(fd, &fds);
+    // Just for the duration of development
+    const int pictureCount = 10;
+    
+    for (int i = 0; i < pictureCount; ++i) {
+        struct pollfd pfd = { fd, POLLIN, 0 };
+        int r = poll(&pfd, 1, 2000);
 
-        struct timeval tv = {};
-        tv.tv_usec = 500;
-
-        int r = select(fd + 1, &fds, NULL, NULL, &tv);
         if (r == -1) {
             throw std::system_error(errno, std::generic_category(), "Frame wait failed");
+        } else if (r == 0) {
+            std::cerr << "Missed a frame" << std::endl;
+            continue;
         }
 
         int ind = dequeueBuffer();
+        // Write to file now to verify the correctness
         saveToFile("captures/out"+std::to_string(i)+".yuv", ind);
     }
 
     stopStream();
     
-    std::cout << "Opened: " << fd << std::endl;
+    std::cout << "Ran succesfully" << std::endl;
     
     return 0;
 }

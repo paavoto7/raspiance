@@ -2,12 +2,15 @@
 #define RECORDER_H
 
 #include <string>
+#include <vector>
+
+#include "buffer.h"
 
 class Recorder {
 public:
 
     Recorder(
-        const std::string& device = "/dev/video2",
+        const std::string& device = "/dev/video2", // For ease of testing
         int width = 640,
         int height = 360
     );
@@ -19,8 +22,10 @@ public:
 private:
     int fd;
     constexpr static int bfrCnt = 20;
-    unsigned char* buffers[bfrCnt];
+    std::vector<Buffer> buffers;
     int bufSize = 0;
+
+    bool running = false;
 
     const int width;
     const int height;
@@ -33,11 +38,12 @@ private:
     int dequeueBuffer();
     
     int queueBuffer(int ind);
-    int queryBuffer(int ind, unsigned char** buffer);
+    int queryBuffer(int ind, Buffer& buffer);
     int requestBuffer();
 
     int setFormat();
     int init();
+    int unInit();
 
     void saveToFile(const std::string& filename, int ind);
 
