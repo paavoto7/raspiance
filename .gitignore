@@ -208,6 +208,8 @@ __marimo__/
 
 # C++
 main
+obj/
+raspiance
 
 # Other
 captures/

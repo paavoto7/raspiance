@@ -4,6 +4,7 @@ https://www.marcusfolkesson.se/blog/capture-a-picture-with-v4l2/
 */
 
 #include "recorder.h"
+#include "processor.h"
 
 #include <iostream>
 
@@ -210,6 +211,8 @@ int Recorder::run() {
         int ind = dequeueBuffer();
         // Write to file now to verify the correctness
         saveToFile("captures/out"+std::to_string(i)+".yuv", ind);
+        auto pix = Processor::CalculateAverage(buffers[ind], width, height);
+        std::cout << "Lum: " << unsigned(pix.lum) << " U and V: " << unsigned(pix.chrom_u) << " : " << unsigned(pix.chrom_v) << std::endl;
     }
 
     stopStream();
