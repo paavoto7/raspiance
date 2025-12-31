@@ -34,4 +34,6 @@ clean:
 run: $(BIN)
 	./$(BIN)
 
+build: $(BIN)
+
 .PHONY: all clean run

@@ -27,10 +27,10 @@ private:
 
     bool running = false;
 
+    const std::string device;
+    
     const int width;
     const int height;
-
-    const std::string device;
 
     int stopStream();
     int startStream();

@@ -11,7 +11,7 @@ namespace Processor {
         uint64_t chrom_v = 0;
         
         const auto size = buffer.size;
-        for (int i = 0; i < size; i += 4) {
+        for (std::size_t i = 0; i < size; i += 4) {
             
             lum += buffer.data[i] + buffer.data[i + 2];
             chrom_u += buffer.data[i + 1];
@@ -24,7 +24,7 @@ namespace Processor {
 
     YUVPix CalculateAverage(const Buffer& buffer, int start, int end, int width, int height) {
 
-        for (int i = 0; i < buffer.size; i += 4) {
+        for (size_t i = 0; i < buffer.size; i += 4) {
             
         }
         

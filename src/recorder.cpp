@@ -134,8 +134,8 @@ int Recorder::stopStream() {
 
 Recorder::Recorder(const std::string& device, int width, int height)
     : device(device),
-    height(height),
-    width(width)
+    width(width),
+    height(height)
 {
     fd = open(device.data(), O_RDWR);
 
