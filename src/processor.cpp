@@ -31,8 +31,23 @@ namespace Processor {
         return { };
     }
 
+    // Converts BT.601 YCbCr YUV to RGB
     RGBPix ConvertToRGB(const YUVPix& yuv) {
-        return { };
+
+        // Reference: Jack, Keith. Video Demystified : A Handbook for the Digital Engineer, Elsevier Science & Technology, 2007
+        float Y = yuv.lum;
+        float Cb = yuv.chrom_u - 128.0f;
+        float Cr = yuv.chrom_v - 128.0f;
+
+        float R = Y + 1.402f   * Cr;
+        float G = Y - 0.34414f * Cb - 0.71414f * Cr;
+        float B = Y + 1.772f   * Cb;
+        
+        return {
+            std::clamp(R, 0.0f, 255.0f),
+            std::clamp(G, 0.0f, 255.0f),
+            std::clamp(B, 0.0f, 255.0f)
+        };
     }
     
 }
