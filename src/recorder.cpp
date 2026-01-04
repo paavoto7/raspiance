@@ -5,6 +5,7 @@ https://www.marcusfolkesson.se/blog/capture-a-picture-with-v4l2/
 
 #include "recorder.h"
 #include "processor.h"
+#include "signals.h"
 
 #include <iostream>
 
@@ -160,6 +161,8 @@ Recorder::~Recorder() {
 }
 
 int Recorder::init() {
+    Signals::registerHandler(SIGINT, Signals::signalHandler);
+    
     setFormat();
 
     auto nbufs = requestBuffer();
@@ -194,14 +197,22 @@ int Recorder::run() {
 
     startStream();
 
+    // Define some testing segments
+    std::vector<Segment> segments;
+    segments.emplace_back(0, 212 * 2, 0, height); // First 1/3
+    segments.emplace_back(852, width * 2, 0, height); // Last 1/3
+
     // Just for the duration of development
-    const int pictureCount = 10;
+    // const int pictureCount = 20 * 30;
     
-    for (int i = 0; i < pictureCount; ++i) {
+    while (Signals::signalStatus == 0) {
         struct pollfd pfd = { fd, POLLIN, 0 };
         int r = poll(&pfd, 1, 2000);
 
         if (r == -1) {
+            // We want to gracefully exit on signal interrupts
+            if (errno == EINTR) break;
+
             throw std::system_error(errno, std::generic_category(), "Frame wait failed");
         } else if (r == 0) {
             std::cerr << "Missed a frame" << std::endl;
@@ -209,10 +220,27 @@ int Recorder::run() {
         }
 
         int ind = dequeueBuffer();
+        queueBuffer(ind);
+
         // Write to file now to verify the correctness
-        saveToFile("captures/out"+std::to_string(i)+".yuv", ind);
-        auto pix = Processor::CalculateAverage(buffers[ind], width, height);
-        std::cout << "Lum: " << unsigned(pix.lum) << " U and V: " << unsigned(pix.chrom_u) << " : " << unsigned(pix.chrom_v) << std::endl;
+        //saveToFile("captures/out"+std::to_string(i)+".yuv", ind);
+        
+        // This is just for testing purposes
+        YUVPix yuvpix{};
+        Processor::CalculateAverage(buffers[ind], yuvpix, width, height);
+        auto pix1 = Processor::ConvertToRGB(yuvpix);
+
+        // Calculate the averages for the specified segments
+        Processor::CalculateAverage(buffers[ind], segments, width, height);
+        for (auto& seg: segments) {
+            auto pix = Processor::ConvertToRGB(seg.avg);
+
+            // Using unsigned to print uint8_t's as numbers and not chars
+            std::cout << "Lum: " << unsigned(seg.avg.lum) << " U: " << unsigned(seg.avg.chrom_u) << " V: " << unsigned(seg.avg.chrom_v) << std::endl;
+            std::cout << "Red: " << unsigned(pix.red) << " Green: " << unsigned(pix.green) << " Blue: " << unsigned(pix.blue) << std::endl;
+        }
+        
+        std::cout << "END Red: " << unsigned(pix1.red) << " Green: " << unsigned(pix1.green) << " Blue: " << unsigned(pix1.blue) << std::endl;
     }
 
     stopStream();
