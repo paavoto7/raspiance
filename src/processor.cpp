@@ -1,11 +1,15 @@
 #include "processor.h"
 
+#include <algorithm>
+#include <stdexcept>
+
 // 	Pixel Format : 'YUYV' (YUYV 4:2:2)
+// YCbCr : BT.601
 
 namespace Processor {
 
-    YUVPix CalculateAverage(const Buffer& buffer, int width, int height) {
-
+    // Calculate the average YUV values for the whole buffer
+    void CalculateAverage(const Buffer& buffer, YUVPix& yuvpix, int width, int height) {
         uint64_t lum = 0;
         uint64_t chrom_u = 0;
         uint64_t chrom_v = 0;
@@ -18,17 +22,52 @@ namespace Processor {
             chrom_v += buffer.data[i + 3];
         }
 
-        const uint64_t l = width * height;
-        return { lum / l, chrom_u / (l / 2), chrom_v / (l / 2) };
+        const auto pixCount = width * height;
+
+        yuvpix.lum = static_cast<uint8_t>(lum / pixCount);
+        yuvpix.chrom_u = static_cast<uint8_t>(chrom_u / (pixCount / 2));
+        yuvpix.chrom_v = static_cast<uint8_t>(chrom_v / (pixCount / 2));
     }
 
-    YUVPix CalculateAverage(const Buffer& buffer, int start, int end, int width, int height) {
+    // Calculate the average YUV values for a number of segments
+    void CalculateAverage(const Buffer& buffer, std::vector<Segment>& segments, int width, int height) {
 
-        for (size_t i = 0; i < buffer.size; i += 4) {
+        for (auto& seg: segments) {
+
+            // Throw error later
+            if (!seg.isInBounds(width * 2, height)) {
+                continue;
+            }
+
+            if (seg.xi % 4 != 0) {
+                throw std::runtime_error("Segment has non-four divisible starting value.");
+            }
+
+            uint64_t lum = 0;
+            uint64_t chrom_u = 0;
+            uint64_t chrom_v = 0;
             
+            // Loop over rows
+            for (int i = seg.yi; i < seg.yj; ++i) {
+                auto row = i * (width * 2);
+
+                // Loop over columns
+                for (int j = seg.xi; j < seg.xj; j += 4) { 
+                    auto pos = row + j;
+                    
+                    lum += buffer.data[pos] + buffer.data[pos + 2];
+                    chrom_u += buffer.data[pos + 1];
+                    chrom_v += buffer.data[pos + 3];
+                }
+            }
+            const auto pixCount = (seg.xj - seg.xi) / 2 * (seg.yj - seg.yi);
+            // YUVPix pix = ;
+            seg.avg = {
+                static_cast<uint8_t>(lum / pixCount),
+                static_cast<uint8_t>(chrom_u / (pixCount / 2)),
+                static_cast<uint8_t>(chrom_v / (pixCount / 2))
+            };
         }
-        
-        return { };
     }
 
     // Converts BT.601 YCbCr YUV to RGB

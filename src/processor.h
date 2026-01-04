@@ -23,12 +23,29 @@ struct RGBImage {
 
 };
 
+// Defines a rectangular segment in the image
+struct Segment {
+    int xi, xj;
+    int yi, yj;
+
+    // Average of the YUV values that CalculateAverage sets
+    YUVPix avg;
+
+    Segment(int xi, int xj, int yi, int yj)
+        : xi(xi), xj(xj), yi(yi), yj(yj) {}
+    
+    inline bool isInBounds(int width, int height) {
+        return xi >= 0 && yi >= 0 && xj <= width && yj <= height;
+    }
+};
+
+// Includes functions for different processing operations of the raw image data
 namespace Processor {
 
-    YUVPix CalculateAverage(const Buffer& buffer, int width, int height);
-    YUVPix CalculateAverage(const Buffer& buffer, int start, int end, int width, int height);
+    void CalculateAverage(const Buffer& buffer, YUVPix& yuvpix, int width, int height);
+    void CalculateAverage(const Buffer& buffer, std::vector<Segment>& segments, int width, int height);
 
-    RGBPix ConvertToRGB(const YUVPix& yuv); 
+    RGBPix ConvertToRGB(const YUVPix& yuv);
     
 }
 
