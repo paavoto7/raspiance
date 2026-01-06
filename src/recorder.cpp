@@ -6,6 +6,7 @@ https://www.marcusfolkesson.se/blog/capture-a-picture-with-v4l2/
 #include "recorder.h"
 #include "processor.h"
 #include "signals.h"
+#include "calibrator/renderer.h"
 
 #include <iostream>
 
@@ -195,6 +196,10 @@ int Recorder::run() {
         return -1;
     }
 
+    // Later move this to e.g. the Calibrator
+    Renderer renderer(width, height);
+    renderer.init();
+
     startStream();
 
     // Define some testing segments
@@ -229,6 +234,8 @@ int Recorder::run() {
         YUVPix yuvpix{};
         Processor::CalculateAverage(buffers[ind], yuvpix, width, height);
         auto pix1 = Processor::ConvertToRGB(yuvpix);
+
+        if (renderer.drawFrame(buffers[ind].data)) break;
 
         // Calculate the averages for the specified segments
         Processor::CalculateAverage(buffers[ind], segments, width, height);
