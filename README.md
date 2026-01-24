@@ -7,7 +7,7 @@ The project is currently in development and not yet production ready.
 
 ### Requirements
 - C++17
-- Make
+- CMake
 - videodev2 header file
 
 Requires a webcam that should be YUYV format and YCbCr BT.601 compatible. The default path for the video feed is */dev/video2/*.
@@ -18,8 +18,23 @@ The project is aimed at RaspberryPi and therefore uses POSIX system calls.
 ```
 git clone https://github.com/paavoto7/raspiance.git
 cd raspiance
+mkdir build && cd build
+cmake ..
+```
+Use Make for building
+```
 make
-./raspiance
+./src/raspiance
+```
+or CMake
+```
+cmake --build .
+./src/raspiance
+```
+
+You can also use the following to enable O3 and march=native
+```
+cmake .. -DUSE_PERFORMANCE_FLAGS=ON
 ```
 
 ## Feature status
