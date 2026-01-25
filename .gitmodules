@@ -1,0 +1,3 @@
+[submodule "thirdparty/hueplusplus"]
+	path = thirdparty/hueplusplus
+	url = https://github.com/enwi/hueplusplus.git
