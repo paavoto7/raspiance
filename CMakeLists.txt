@@ -14,6 +14,23 @@ if(NOT V4L2_INCLUDE_DIR)
     message(FATAL_ERROR "videodev2.h not found. Install libv4l-dev or equivalent.")
 endif()
 
+find_package(hueplusplus QUIET)
+set(NEED_SUBMODULES NOT hueplusplus_FOUND)
+
+find_package(GIT QUIET)
+if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
+    option(GIT_SUBMODULE "Check submodules during build" ON)
+    if(GIT_SUBMODULES AND NEED_SUBMODULES)
+        message(STATUS "Submodule updates")
+        execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+			RESULT_VARIABLE GIT_SUBMOD_RESULT)
+		if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+			message(FATAL_ERROR "git submodule update --init failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
+		endif()
+    endif()
+endif()
+
 option(USE_PERFORMANCE_FLAGS "Enable O3 and native optimisation" OFF)
 
 # Perhaps move these to src so they don't apply later to libraries
@@ -23,5 +40,10 @@ if(USE_PERFORMANCE_FLAGS)
 endif()
 
 add_subdirectory(src)
+
+if(NOT hueplusplus_FOUND)
+    message(STATUS "hueplusplus was not found, the submodule is used.")
+    add_subdirectory("thirdparty/hueplusplus")
+endif()
 
 target_compile_options(raspiance PRIVATE -Wall -Wextra)
